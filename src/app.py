@@ -11,8 +11,7 @@ app.secret_key = os.urandom(24)
 CORS(app, resources={r"/*": {"origins": "*"}})
 sessions = {}
 
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # directory of books_recommender.py
+  # directory of books_recommender.py
 books_data = initialize_books()
 qa_chain, vector_store = initiate_RAG_pipeline(books_data)
 conversation_state = {}
@@ -30,7 +29,6 @@ def start():
         'step': 'search',
         'history': []
     }
-
     message = "Welcome! What book are you looking for?"
     conversation_state[session_id]['history'].append({"role": "assistant", "content": message})
 
@@ -62,15 +60,12 @@ def chat():
 
         response = result['result']
         source_docs = result.get('source_documents', [])
-        print(source_docs[0])
-        print("\n🔍 DEBUG: Result keys:", result.keys())
-        print(f"Source docs count: {len(source_docs)}")
 
         # Format recommendations
         retrieved_docs = vector_store.similarity_search(user_input, k=5)
         print("\n🔍 DEBUG: Docs:", retrieved_docs)
         recommendations = []
-        for doc in retrieved_docs[:5]:
+        for doc in source_docs[:5]:
             recommendations.append({
                 "title": doc.metadata.get('title', 'Unknown'),
                 "author": doc.metadata.get('author', 'Unknown'),

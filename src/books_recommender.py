@@ -5,9 +5,9 @@ import ast
 from sklearn.feature_extraction.text import TfidfVectorizer
 from langchain_core.documents import Document
 from langchain_text_splitters import TokenTextSplitter
-from langchain_community.vectorstores import FAISS
+from pathlib import Path
 from langchain_classic.chains.retrieval_qa.base import RetrievalQA
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain_mistralai import MistralAIEmbeddings
 from langchain_mistralai import ChatMistralAI
 import re
@@ -15,13 +15,11 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # directory of books_recommender.py
-glove_file = os.path.join(BASE_DIR, "assets", "glove.twitter.27B.50d.txt")
+BASE_DIR = Path(__file__).resolve().parent
+glove_file = os.path.join(BASE_DIR.parent, "assets", "glove.twitter.27B.50d.txt")
 # model = KeyedVectors.load_word2vec_format(glove_file, binary=False, no_header=True)
-CHROMA_DB_PATH = "../chroma_db"
-
-keybert_file = os.path.join(BASE_DIR, "assets", "books_modified.csv")
-keybert_keywords = pd.read_csv(keybert_file, usecols = ['keywords1'])
+CHROMA_DB_PATH = os.path.join(os.path.dirname(__file__), "chroma_db")
+print(CHROMA_DB_PATH)
 
 
 def get_preference():
@@ -55,7 +53,7 @@ def get_top_keywords(row_idx, tfidf_mat, features, top_n=5):
     top_indices = scores.argsort()[::-1][:top_n]
     return features[nonzero_idx][top_indices].tolist()
 
-
+"""
 def extract_tfidf_keywords(books_data):
     vectorizer = TfidfVectorizer(token_pattern=r'(?u)\b[a-zA-Z]+\b', stop_words='english')
     tfidf_matrix = vectorizer.fit_transform(books_data['description'])
@@ -69,7 +67,7 @@ def extract_tfidf_keywords(books_data):
     ]
     books_data['keywords'] = books_data['keywords_comb']
     return books_data
-
+"""
 
 """def words_to_vector(words, model=model):
     vectors = [model.get_vector(word) if word in model else np.zeros(model.vector_size) for word in words]
@@ -88,7 +86,7 @@ def remove_non_alphabetic(desc):
 
 # Preprocess dataset
 def initialize_books():
-    books_file = os.path.join(BASE_DIR, "assets", "books_1.Best_Books_Ever.csv")
+    books_file = os.path.join(BASE_DIR.parent, "assets", "books_1.Best_Books_Ever.csv")
     books_data = pd.read_csv(books_file,
                              usecols=['title', 'author', 'rating', 'numRatings', 'description', 'language', 'genres'])
     books_data = books_data.reset_index(drop=True)
@@ -102,38 +100,53 @@ def initialize_books():
 
     # Rating score
     books_data['rating_total'] = books_data['rating'] * books_data['numRatings']
-    books_data = extract_tfidf_keywords(books_data)
-    # books_data = add_book_vectors(books_data)
 
     return books_data
 
-def build_documents(df):
-    docs = []
-    print(df.head(2))
 
-    for _, row in df.iterrows():
-        text = f"""
-                Title: {row['title']}
-                Author: {row['author']}
-                Genres: {row['genres']}
-                Description: {row['description']}
-                """
+def build_documents(books_df):
+    """Convert DataFrame to LangChain Documents."""
+    documents = []
+    for idx, row in books_df.iterrows():
+        # Handle genres - convert to list and filter empty values
+        genres = row['genres']
 
-        docs.append(
-            Document(
-                page_content=text,
-                metadata={
-                    "title": row["title"],
-                    "author": row["author"],
-                    "genres": row["genres"],
-                    "desc": row["description"],
-                }
-            )
+        # Handle NaN/None
+        if pd.isna(genres).all():
+            genres_list = ['Unknown']
+        elif isinstance(genres, str):
+            # Split by comma and strip whitespace, filter empty strings
+            genres_list = [g.strip() for g in genres.split(',') if g.strip()]
+            # If empty after filtering, add default
+            if not genres_list:
+                genres_list = ['Unknown']
+        elif isinstance(genres, list):
+            # Already a list, just ensure it's not empty
+            genres_list = genres if genres else ['Unknown']
+        else:
+            genres_list = ['Unknown']
+
+        # Handle other fields similarly
+        title = str(row['title']) if not pd.isna(row['title']) else 'Unknown'
+        author = str(row['author']) if not pd.isna(row['author']) else 'Unknown'
+        description = str(row['description']) if not pd.isna(row['description']) else 'No description'
+
+        doc = Document(
+            page_content=description,
+            metadata={
+                'title': title,
+                'author': author,
+                'genres': genres_list,  # Always a non-empty list
+                'rating': float(row.get('rating', 0)) if not pd.isna(row.get('rating')) else 0,
+                'language': str(row.get('language', 'Unknown')) if not pd.isna(row.get('language')) else 'Unknown'
+            }
         )
-    return docs
+        documents.append(doc)
+
+    print(f"✅ Built {len(documents)} documents")
+    return documents
 
 def initiate_RAG_pipeline(books_df):
-    # Create vector store with Mistral embeddings
     embeddings = MistralAIEmbeddings(model="mistral-embed")
 
     if os.path.exists(CHROMA_DB_PATH):
@@ -144,21 +157,18 @@ def initiate_RAG_pipeline(books_df):
         )
         print("✅ Chroma database loaded!")
     else:
-        print("📖 Creating new Pinecone index (first time only)...")
-
-        # Load CSV
         book_docs = build_documents(books_df)
-
         # Split into chunks
         text_splitter = TokenTextSplitter(chunk_size=500, chunk_overlap=50)
         books = text_splitter.split_documents(book_docs)
+
         print(f"✅ Split into {len(books)} chunks")
 
         vector_store = Chroma.from_documents(
-            documents=books,
-            embedding=embeddings,
-            persist_directory=CHROMA_DB_PATH
-        )
+                documents=books[:100],
+                embedding=embeddings,
+                persist_directory=CHROMA_DB_PATH
+            )
         print(f"✅ Chroma database created and saved to {CHROMA_DB_PATH}")
 
     # Create RAG chain with RetrievalQA
