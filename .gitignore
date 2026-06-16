@@ -187,3 +187,5 @@ fabric.properties
 src/chroma_db/*
 interfaces/*
 assets/
+.idea/
+src/chroma_db/
