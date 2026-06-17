@@ -1,28 +1,6 @@
 # Book Recommendation Chatbot
 
-A simple chatbot web app built with Flask that recommends books based on user preferences (by *genre* or *author*). The chatbot maintains a short conversation flow and suggests books from a dataset.
-
-
-## 📂 Project Structure
-```
-.
-├── Books_recommender.ipynb
-├── LICENSE
-├── README.md
-├── __pycache__
-├── app.py
-├── assets
-│   ├── books_1.Best_Books_Ever.csv
-│   ├── books_modified.csv
-│   └── glove.twitter.27B.50d.txt
-├── books_recommender.py
-├── requirements.txt
-├── static
-└── templates
-    └── chat.html
-```
-
----
+A simple chatbot web app built with Flask that recommends books.
 
 ## ⚙️ Installation
 
