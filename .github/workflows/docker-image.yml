@@ -19,10 +19,12 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract version
+      - name: Get version from git tag
         id: version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
+          VERSION=$(git describe --tags --always 2>/dev/null || echo "latest")
+          # Remove 'v' prefix if present (e.g., v1.2.3 → 1.2.3)
+          VERSION=${VERSION#v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Build and Push
